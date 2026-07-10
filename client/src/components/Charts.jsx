@@ -78,7 +78,7 @@ export function StockStatusPieChart({ inStock, lowStock }) {
           outerRadius={100}
           paddingAngle={4}
           dataKey="value"
-          label={({ name, value }) => `${name}: ${value}`}
+          label={({ name, value }) => `${name}: ${Number(value).toFixed(2)}`}
         >
           <Cell fill="#38a169" />
           <Cell fill="#e53e3e" />

@@ -4,17 +4,17 @@ let isRefreshing = false
 let refreshPromise = null
 
 function getTokens() {
-  return { token: localStorage.getItem('token'), refreshToken: localStorage.getItem('refreshToken') }
+  return { token: sessionStorage.getItem('token'), refreshToken: sessionStorage.getItem('refreshToken') }
 }
 
 function setTokens(token, refreshToken) {
-  localStorage.setItem('token', token)
-  if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
+  sessionStorage.setItem('token', token)
+  if (refreshToken) sessionStorage.setItem('refreshToken', refreshToken)
 }
 
 function clearTokens() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('refreshToken')
+  sessionStorage.removeItem('token')
+  sessionStorage.removeItem('refreshToken')
 }
 
 async function refreshAccessToken() {
@@ -85,6 +85,7 @@ async function api(method, url, body = null, opts = {}) {
 export function get(url, opts) { return api('GET', url, null, opts) }
 export function post(url, body, opts) { return api('POST', url, body, opts) }
 export function put(url, body, opts) { return api('PUT', url, body, opts) }
+export function patch(url, body, opts) { return api('PATCH', url, body, opts) }
 export function del(url, opts) { return api('DELETE', url, null, opts) }
 
 export { setTokens, clearTokens, getTokens }

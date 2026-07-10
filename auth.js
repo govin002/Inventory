@@ -3,14 +3,14 @@ const db = require('./db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'inventory-management-secret-key-2024';
 const REFRESH_SECRET = process.env.REFRESH_SECRET || 'inventory-refresh-secret-key-2024';
-const TOKEN_EXPIRY = '24h';
+const TOKEN_EXPIRY = '30m';
 const REFRESH_EXPIRY = '7d';
 
 const ROLE_HIERARCHY = { admin: 4, manager: 3, warehouse: 2, viewer: 1 };
 
 const DEFAULT_PERMISSIONS = {
   admin: ['*'],
-  manager: ['inventory:read', 'inventory:create', 'inventory:update', 'inventory:delete', 'transactions:read', 'transactions:create', 'transactions:delete', 'settings:read'],
+  manager: ['inventory:read', 'inventory:create', 'inventory:update', 'inventory:delete', 'transactions:read', 'transactions:create', 'transactions:delete', 'invoices:read', 'invoices:create', 'settings:read', 'audit:read'],
   warehouse: ['inventory:read', 'transactions:read', 'transactions:create'],
   viewer: ['inventory:read', 'transactions:read']
 };
@@ -44,13 +44,26 @@ function hasPermission(userRole, requiredRole) {
 function getEffectivePermissions() {
   try {
     const settings = db.getAllSettings();
-    if (settings && settings.permissions) return settings.permissions;
+    if (settings && settings.permissions) {
+      // Merge stored permissions with defaults so new permissions (e.g. invoices:*)
+      // are available even if the DB was created before they were added
+      const merged = { ...DEFAULT_PERMISSIONS }
+      for (const [role, perms] of Object.entries(settings.permissions)) {
+        if (perms.includes('*')) {
+          merged[role] = ['*']
+        } else {
+          const existing = merged[role] || []
+          merged[role] = [...new Set([...existing, ...perms])]
+        }
+      }
+      return merged
+    }
   } catch {}
   return DEFAULT_PERMISSIONS;
 }
 
 function getAllPermissionKeys() {
-  return ['inventory:read', 'inventory:create', 'inventory:update', 'inventory:delete', 'transactions:read', 'transactions:create', 'transactions:delete', 'users:read', 'users:create', 'users:update', 'users:delete', 'settings:read', 'settings:update'];
+  return ['inventory:read', 'inventory:create', 'inventory:update', 'inventory:delete', 'transactions:read', 'transactions:create', 'transactions:delete', 'invoices:read', 'invoices:create', 'users:read', 'users:create', 'users:update', 'users:delete', 'settings:read', 'settings:update', 'audit:read', 'audit:export'];
 }
 
 function checkPermission(perm) {

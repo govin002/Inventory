@@ -5,11 +5,7 @@ import { ArrowLeft, Pencil, QrCode, Barcode, Package, Download, Printer, ArrowDo
 import { get, post } from '../api'
 import DatePicker from '../components/DatePicker'
 import Pagination from '../components/Pagination'
-import { formatDateNepali } from '../utils'
-
-function formatCurrency(value) {
-  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
+import { formatDateNepali, formatCurrency } from '../utils'
 
 const rowVariants = {
   hidden: { opacity: 0, x: -10 },
@@ -24,6 +20,8 @@ export default function ItemDetail() {
   const [txnLoading, setTxnLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [currency, setCurrency] = useState('USD')
+  const [lowStockThreshold, setLowStockThreshold] = useState(20)
   const [showQR, setShowQR] = useState(false)
   const [showBarcode, setShowBarcode] = useState(false)
   const [showQuickForm, setShowQuickForm] = useState(false)
@@ -35,13 +33,18 @@ export default function ItemDetail() {
   const [txnSort, setTxnSort] = useState('desc')
 
   useEffect(() => {
-    fetch(`/api/inventory/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-      .then((res) => {
-        if (!res.ok) throw new Error('Item not found')
-        return res.json()
-      })
-      .then(setItem)
-      .catch((err) => setError(err.message))
+    Promise.all([
+      fetch(`/api/inventory/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+        .then((res) => {
+          if (!res.ok) throw new Error('Item not found')
+          return res.json()
+        }),
+      get('/api/settings').catch(() => ({ lowStockThreshold: 20 }))
+    ]).then(([itemData, settings]) => {
+      setItem(itemData)
+      if (settings?.lowStockThreshold != null) setLowStockThreshold(settings.lowStockThreshold)
+      if (settings?.currency) setCurrency(settings.currency)
+    }).catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [id])
 
@@ -99,7 +102,7 @@ export default function ItemDetail() {
   if (!item) return <div className="empty-state">Item not found</div>
 
   const value = item.quantity * item.price
-  const isLow = item.quantity < 20
+  const isLow = item.quantity < lowStockThreshold
 
   return (
     <>
@@ -165,11 +168,11 @@ export default function ItemDetail() {
             </div>
             <div className="detail-stat-item">
               <span className="detail-stat-label">Unit Price</span>
-              <span className="detail-stat-value">{formatCurrency(item.price)}</span>
+              <span className="detail-stat-value">{formatCurrency(item.price, currency)}</span>
             </div>
             <div className="detail-stat-item">
               <span className="detail-stat-label">Total Value</span>
-              <span className="detail-stat-value highlight">{formatCurrency(value)}</span>
+              <span className="detail-stat-value highlight">{formatCurrency(value, currency)}</span>
             </div>
           </div>
         </motion.div>

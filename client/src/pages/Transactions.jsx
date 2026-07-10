@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, ArrowDownCircle, ArrowUpCircle, ListOrdered, Image as ImageIcon, Package, ExternalLink } from 'lucide-react'
+import { Plus, ArrowDownCircle, ArrowUpCircle, ListOrdered, Package, ExternalLink, FileText, DollarSign } from 'lucide-react'
 import StatCard from '../components/StatCard'
 import { TransactionsOverTimeChart } from '../components/Charts'
 import { get } from '../api'
-import ImagePreview from '../components/ImagePreview'
-import { formatDateNepali } from '../utils'
+import { formatDateNepali, formatCurrency } from '../utils'
+
 
 const rowVariants = {
   hidden: { opacity: 0, x: -10 },
@@ -14,17 +14,20 @@ const rowVariants = {
 }
 
 export default function Transactions() {
-  const [chartData, setChartData] = useState({ overTime: [], totalIn: 0, totalOut: 0, totalTransactions: 0 })
+  const [chartData, setChartData] = useState({ overTime: [], totalIn: 0, totalOut: 0, totalRevenue: 0, totalBilled: 0, currency: 'USD' })
   const [loading, setLoading] = useState(true)
   const [recentTxns, setRecentTxns] = useState([])
   const [recentLoading, setRecentLoading] = useState(true)
-  const [previewImage, setPreviewImage] = useState(null)
 
   useEffect(() => {
     async function load() {
       try {
-        const stats = await get('/api/transactions/stats')
-        setChartData(stats)
+        const [stats, settings] = await Promise.all([
+          get('/api/transactions/stats'),
+          get('/api/settings').catch(() => null)
+        ])
+        const latestCurrency = settings?.currency || stats?.currency || 'USD'
+        setChartData({ ...stats, currency: latestCurrency })
       } catch (err) {
         console.error('Failed to load chart data:', err)
       } finally {
@@ -61,9 +64,10 @@ export default function Transactions() {
       </div>
 
       <div className="stats-grid">
-        <StatCard icon={ListOrdered} label="Total Transactions" value={(chartData.totalTransactions || 0).toLocaleString()} color="blue" index={0} />
+        <StatCard icon={ListOrdered} label="Total Transactions" value={(recentTxns.length || 0).toLocaleString()} color="blue" index={0} />
         <StatCard icon={ArrowDownCircle} label="Stock In" value={(chartData.totalIn || 0).toLocaleString()} color="green" index={1} />
         <StatCard icon={ArrowUpCircle} label="Stock Out" value={(chartData.totalOut || 0).toLocaleString()} color="red" index={2} />
+        <StatCard icon={DollarSign} label="Revenue (Paid)" value={formatCurrency(chartData.totalRevenue || 0, chartData.currency)} color="amber" index={3} />
       </div>
 
       <div className="charts-grid">
@@ -103,14 +107,7 @@ export default function Transactions() {
               <div className="txn-log-list">
                 <AnimatePresence initial={false}>
                   {recentTxns.map((txn, i) => (
-                    <motion.div
-                      key={txn.id}
-                      className="txn-log-item"
-                      custom={i}
-                      variants={rowVariants}
-                      initial="hidden"
-                      animate="visible"
-                    >
+                    <motion.div key={txn.id} className="txn-log-item" custom={i} variants={rowVariants} initial="hidden" animate="visible">
                       <div className="txn-log-icon">
                         {txn.type === 'stock_in' ? (
                           <ArrowDownCircle size={18} className="txn-icon-in" />
@@ -120,34 +117,24 @@ export default function Transactions() {
                       </div>
                       <div className="txn-log-body">
                         <div className="txn-log-top">
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flex: 1, minWidth: 0 }}>
-                            <Link to={`/inventory/${txn.item_id}`} style={{ flex: 1, minWidth: 0, textDecoration: 'none' }}>
-                              <span className="table-name" style={{ fontSize: '0.82rem' }}>{txn.item_name}</span>
-                            </Link>
-                            {txn.item_image ? (
-                              <img
-                                src={txn.item_image}
-                                alt={txn.item_name}
-                                className="table-thumb"
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  setPreviewImage({ src: txn.item_image, alt: txn.item_name })
-                                }}
-                                style={{ marginTop: 2, flexShrink: 0 }}
-                              />
-                            ) : (
-                              <div className="table-thumb-placeholder" style={{ marginTop: 2, flexShrink: 0 }}><ImageIcon size={14} /></div>
-                            )}
-                          </div>
-                          <span className="txn-log-qty" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{txn.quantity} units</span>
+                          <Link to={`/transactions/${txn.id}`} style={{ flex: 1, minWidth: 0, textDecoration: 'none' }}>
+                            <span className="table-name" style={{ fontSize: '0.82rem' }}>
+                              {txn.items?.[0]?.item_name || txn.invoice_number || `Txn #${txn.id}`}
+                              {txn.itemCount > 1 && <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}> +{txn.itemCount - 1} more</span>}
+                            </span>
+                          </Link>
+                          <span className="txn-log-qty" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                            {(txn.items || []).reduce((s, i) => s + i.quantity, 0)} units
+                          </span>
                         </div>
                         <div className="txn-log-flow">
                           {txn.source && <span>From: {txn.source}</span>}
                           {txn.destination && <span>To: {txn.destination}</span>}
+                          {txn.customer_name && <span>Customer: {txn.customer_name}</span>}
                         </div>
                         <div className="txn-log-meta">
-                          <span className="txn-log-date">{(() => { const fd = formatDateNepali(txn.date); return fd ? <><div>{fd.en}</div><div style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>{fd.np}</div></> : '' })()}</span>
+                          <span>{(() => { const fd = formatDateNepali(txn.date); return fd ? <><div>{fd.en}</div><div style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>{fd.np}</div></> : '' })()}</span>
+                          {txn.invoice_number && <span className="badge badge-normal" style={{ fontSize: '0.62rem', padding: '2px 6px' }}><FileText size={10} /> {txn.invoice_number}</span>}
                           {txn.notes && <span className="txn-log-notes">{txn.notes}</span>}
                         </div>
                       </div>
@@ -160,11 +147,6 @@ export default function Transactions() {
         </motion.div>
       </div>
 
-      <ImagePreview
-        src={previewImage?.src}
-        alt={previewImage?.alt}
-        onClose={() => setPreviewImage(null)}
-      />
     </>
   )
 }

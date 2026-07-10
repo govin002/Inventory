@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Pencil, Trash2, Eye, Search, Filter, Package, Image, FileSpreadsheet } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, Search, Filter, Package, Image, FileSpreadsheet, Calendar, X } from 'lucide-react'
 import { get, del } from '../api'
 import Pagination from '../components/Pagination'
-import { formatDateTimeNepali, exportToExcel } from '../utils'
+import ConfirmModal from '../components/ConfirmModal'
+import { useToast } from '../components/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
+import { formatDateTimeNepali, exportToExcel, formatCurrency } from '../utils'
+import DatePicker from '../components/DatePicker'
 
 const DEFAULT_THRESHOLD = 20
-
-function formatCurrency(v) { return `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
 
 
 const rowVariants = {
@@ -17,40 +19,55 @@ const rowVariants = {
   exit: { opacity: 0, x: 10, transition: { duration: 0.2 } }
 }
 
-export default function InventoryItems({ user, permissions }) {
+export default function InventoryItems() {
+  const { permissions } = useAuth()
   const navigate = useNavigate()
+  const showToast = useToast()
   const [items, setItems] = useState([])
-  const [settings, setSettings] = useState({ lowStockThreshold: DEFAULT_THRESHOLD })
+  const [settings, setSettings] = useState({ lowStockThreshold: DEFAULT_THRESHOLD, currency: 'USD' })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
   const [sortBy, setSortBy] = useState('updated_at')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(15)
 
   const canEdit = permissions?.includes('inventory:update')
   const canDelete = permissions?.includes('inventory:delete')
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   async function loadData() {
     try {
+      const params = new URLSearchParams()
+      if (filterDateFrom) params.set('date_from', filterDateFrom)
+      if (filterDateTo) params.set('date_to', filterDateTo)
+      const qs = params.toString()
       const [inv, cfg] = await Promise.all([
-        get('/api/inventory'),
+        get(`/api/inventory${qs ? '?'+qs : ''}`),
         get('/api/settings')
       ])
       setItems(inv)
-      if (cfg?.lowStockThreshold != null) setSettings({ lowStockThreshold: cfg.lowStockThreshold })
+      if (cfg?.lowStockThreshold != null) setSettings({ lowStockThreshold: cfg.lowStockThreshold, currency: cfg.currency || 'USD' })
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
   }
 
-  async function deleteItem(id) {
-    if (!confirm('Delete this item?')) return
-    await del(`/api/inventory/${id}`)
-    loadData()
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    try {
+      await del(`/api/inventory/${deleteTarget}`)
+      setDeleteTarget(null)
+      showToast('Item deleted successfully', { variant: 'success' })
+      loadData()
+    } catch (err) {
+      showToast('Failed to delete item', { variant: 'error' })
+    }
   }
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [filterDateFrom, filterDateTo])
 
   const categories = [...new Set(items.map((i) => i.category))]
 
@@ -73,6 +90,17 @@ export default function InventoryItems({ user, permissions }) {
 
   function handleSearch(v) { setSearch(v); setPage(1) }
   function handleCategory(v) { setFilterCategory(v); setPage(1) }
+  
+  const hasActiveFilters = search || filterCategory || filterStatus || filterDateFrom || filterDateTo
+  
+  function clearFilters() {
+    setSearch('')
+    setFilterCategory('')
+    setFilterStatus('')
+    setFilterDateFrom('')
+    setFilterDateTo('')
+    setPage(1)
+  }
 
   return (
     <>
@@ -89,8 +117,8 @@ export default function InventoryItems({ user, permissions }) {
                 { header: 'SKU', key: 'sku', width: 15 },
                 { header: 'Category', key: 'category', width: 18 },
                 { header: 'Quantity', key: 'quantity', width: 12 },
-                { header: 'Price', key: 'price', width: 12, formatter: (v) => `$${Number(v).toFixed(2)}` },
-                { header: 'Value', key: 'value', width: 12, formatter: (_, row) => `$${(row.quantity * row.price).toFixed(2)}` },
+                { header: 'Price', key: 'price', width: 12, formatter: (v) => formatCurrency(v, settings.currency) },
+                { header: 'Value', key: 'value', width: 12, formatter: (_, row) => formatCurrency(row.quantity * row.price, settings.currency) },
                 { header: 'Supplier', key: 'supplier', width: 20 },
                 { header: 'Description', key: 'description', width: 30 },
                 { header: 'Date', key: 'updated_at', width: 20, formatter: (v) => formatDateTimeNepali(v)?.en || '' }
@@ -125,14 +153,30 @@ export default function InventoryItems({ user, permissions }) {
                 <option value="">All Status</option>
                 <option value="in">In Stock</option>
                 <option value="low">Low Stock</option>
-              </select>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
+              </select>              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
                 <option value="updated_at">Recently Updated</option>
                 <option value="name">Name (A-Z)</option>
                 <option value="quantity">Quantity (High-Low)</option>
                 <option value="price">Price (High-Low)</option>
               </select>
             </div>
+            <div className="filter-group" style={{ gap: 4 }}>
+              <Calendar size={14} style={{ color: 'var(--gray-400)' }} />
+              <DatePicker value={filterDateFrom} onChange={(v) => { setFilterDateFrom(v); setPage(1) }} />
+              <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>to</span>
+              <DatePicker value={filterDateTo} onChange={(v) => { setFilterDateTo(v); setPage(1) }} />
+            </div>
+            {hasActiveFilters && (
+              <motion.button
+                className="btn btn-secondary btn-sm"
+                onClick={clearFilters}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                style={{ padding: '4px 10px', fontSize: '0.72rem', minHeight: 30, flexShrink: 0 }}
+              >
+                <X size={12} /> Clear
+              </motion.button>
+            )}
           </div>
         </div>
         <div className="card-body">
@@ -160,7 +204,6 @@ export default function InventoryItems({ user, permissions }) {
                   ) : (
                     paginated.map((item, i) => {
                       const value = item.quantity * item.price
-                      const settings = { lowStockThreshold: 20 }
                       const isLow = item.quantity < settings.lowStockThreshold
                       return (
                         <motion.tr key={item.id} custom={i} variants={rowVariants} initial="hidden" animate="visible" exit="exit" layout>
@@ -176,14 +219,14 @@ export default function InventoryItems({ user, permissions }) {
                           <td style={{ fontSize: '0.72rem', color: 'var(--gray-400)', whiteSpace: 'nowrap' }}>
                             {(() => { const fd = formatDateTimeNepali(item.updated_at); return fd ? <><div>{fd.en}</div><div>{fd.np}</div></> : '' })()}
                           </td>
-                          <td><span className="table-price">{formatCurrency(item.price)}</span></td>
-                          <td><span className="table-value">{formatCurrency(value)}</span></td>
+                          <td><span className="table-price">{formatCurrency(item.price, settings.currency)}</span></td>
+                          <td><span className="table-value">{formatCurrency(value, settings.currency)}</span></td>
                           <td><span className={`badge ${isLow ? 'badge-low' : 'badge-normal'}`}>{isLow ? 'Low Stock' : 'In Stock'}</span></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="actions" style={{ justifyContent: 'flex-end' }}>
                               <Link to={`/inventory/${item.id}`}><motion.button className="icon-btn" whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}><Eye size={16} /></motion.button></Link>
                               {canEdit && <Link to={`/edit/${item.id}`}><motion.button className="icon-btn" whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}><Pencil size={16} /></motion.button></Link>}
-                              {canDelete && <motion.button className="icon-btn delete" whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => deleteItem(item.id)}><Trash2 size={16} /></motion.button>}
+                              {canDelete && <motion.button className="icon-btn delete" whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setDeleteTarget(item.id)}><Trash2 size={16} /></motion.button>}
                             </div>
                           </td>
                         </motion.tr>
@@ -210,6 +253,17 @@ export default function InventoryItems({ user, permissions }) {
           />
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="Delete Item"
+        message="Are you sure you want to delete this item? This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   )
 }

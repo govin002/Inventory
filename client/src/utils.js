@@ -1,6 +1,48 @@
 import NepaliDate from 'nepali-date'
 import * as XLSX from 'xlsx'
 
+/**
+ * Currency code → display data mapping.
+ * Add new currencies here and they'll appear in the settings dropdown.
+ */
+export const CURRENCY_MAP = {
+  USD: { symbol: '$', code: 'USD', name: 'US Dollar' },
+  NPR: { symbol: 'रु', code: 'NPR', name: 'Nepalese Rupee' },
+  INR: { symbol: '₹', code: 'INR', name: 'Indian Rupee' },
+  EUR: { symbol: '€', code: 'EUR', name: 'Euro' },
+  GBP: { symbol: '£', code: 'GBP', name: 'British Pound' },
+  CAD: { symbol: 'C$', code: 'CAD', name: 'Canadian Dollar' },
+  AUD: { symbol: 'A$', code: 'AUD', name: 'Australian Dollar' },
+  JPY: { symbol: '¥', code: 'JPY', name: 'Japanese Yen' },
+  CNY: { symbol: '¥', code: 'CNY', name: 'Chinese Yuan' },
+  CHF: { symbol: 'Fr.', code: 'CHF', name: 'Swiss Franc' },
+  NZD: { symbol: 'NZ$', code: 'NZD', name: 'New Zealand Dollar' },
+  KRW: { symbol: '₩', code: 'KRW', name: 'South Korean Won' },
+  SEK: { symbol: 'kr', code: 'SEK', name: 'Swedish Krona' },
+  NOK: { symbol: 'kr', code: 'NOK', name: 'Norwegian Krone' },
+  DKK: { symbol: 'kr', code: 'DKK', name: 'Danish Krone' },
+  PKR: { symbol: '₨', code: 'PKR', name: 'Pakistani Rupee' },
+  BDT: { symbol: '৳', code: 'BDT', name: 'Bangladeshi Taka' },
+  LKR: { symbol: '₨', code: 'LKR', name: 'Sri Lankan Rupee' },
+}
+
+/**
+ * Format a number amount with the given currency code.
+ * @param {number} amount
+ * @param {string} currencyCode - e.g. 'USD', 'NPR', 'EUR' (defaults to 'USD')
+ * @returns {string} e.g. "$1,234.56" or "Rs. 1,234.56"
+ */
+export function formatCurrency(amount, currencyCode = 'USD') {
+  const currency = CURRENCY_MAP[currencyCode] || CURRENCY_MAP.USD
+  const formatted = Number(amount).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+  // JPY and KRW don't use decimals typically, but we keep 2 for consistency
+  // Add a space after dot-ended symbols (e.g. "Rs. 1,234") and non-dot symbols (e.g. "$ 1,234")
+  return `${currency.symbol} ${formatted}`.trim()
+}
+
 const nepaliMonths = [
   'Baisakh', 'Jestha', 'Asar', 'Shrawan', 'Bhadra', 'Aswin',
   'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'

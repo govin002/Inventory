@@ -1,17 +1,26 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Users, Package, Building2, Database, ShieldCheck } from 'lucide-react'
+import { Users, Package, Building2, Database, ShieldCheck, Activity, Receipt } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
-const tabs = [
-  { to: '/settings/users', label: 'Users', icon: Users },
-  { to: '/settings/inventory', label: 'Inventory', icon: Package },
-  { to: '/settings/company', label: 'Company', icon: Building2 },
-  { to: '/settings/data', label: 'Data', icon: Database },
-  { to: '/settings/permissions', label: 'Permissions', icon: ShieldCheck },
+const allTabs = [
+  { to: '/settings/users', label: 'Users', icon: Users, permission: 'users:read' },
+  { to: '/settings/inventory', label: 'Inventory', icon: Package, permission: 'settings:read' },
+  { to: '/settings/company', label: 'Company', icon: Building2, permission: 'settings:read' },
+  { to: '/settings/invoice', label: 'Invoice', icon: Receipt, permission: 'settings:read' },
+  { to: '/settings/activity', label: 'Activity', icon: Activity, permission: 'audit:read' },
+  { to: '/settings/data', label: 'Data', icon: Database, permission: 'settings:read' },
+  { to: '/settings/permissions', label: 'Permissions', icon: ShieldCheck, permission: 'settings:update' },
 ]
 
 export default function Settings() {
+  const { permissions } = useAuth()
+  
+  const tabs = allTabs.filter((tab) =>
+    !tab.permission || (permissions && (permissions.includes('*') || permissions.includes(tab.permission)))
+  )
+  
   return (
     <>
       <div className="page-header">

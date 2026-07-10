@@ -1,12 +1,17 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Upload, X } from 'lucide-react'
 
-export default function ImageUpload({ value, onChange }) {
-  const [preview, setPreview] = useState(value || '')
+export default function ImageUpload({ currentImage, onUpload }) {
+  const [preview, setPreview] = useState(currentImage || '')
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef()
+
+  // Sync preview when currentImage changes (e.g. loading an existing item for editing)
+  useEffect(() => {
+    setPreview(currentImage || '')
+  }, [currentImage])
 
   async function handleFile(e) {
     const file = e.target.files[0]
@@ -29,10 +34,13 @@ export default function ImageUpload({ value, onChange }) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Upload failed')
-      onChange(data.url)
+      onUpload(data.url)
       setPreview(data.url)
+      // Reset file input so the same file can be re-selected
+      if (inputRef.current) inputRef.current.value = ''
     } catch (err) {
       setError(err.message)
+      setPreview(currentImage || '')
     } finally {
       setUploading(false)
     }
@@ -40,7 +48,7 @@ export default function ImageUpload({ value, onChange }) {
 
   function handleRemove() {
     setPreview('')
-    onChange('')
+    onUpload('')
     if (inputRef.current) inputRef.current.value = ''
   }
 
